@@ -3,9 +3,9 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/db.js'; // Aapka DB connection file
+import connectDB from './config/db.js';
 
-// Routes Imports (Apne mutabiq check kar lein)
+// Routes Imports
 import authRoutes from './routes/authRoutes.js';
 import postRoutes from './routes/postRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
@@ -14,55 +14,49 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// 🌐 CORS Configuration for Deployment
-// Yeh frontend ke localhost aur live URL dono ko allow karega
-const allowedOrigins = [
-  'http://localhost:5173', // Local Frontend
-  process.env.FRONTEND_URL // Live Frontend URL (Jo deployment ke baad milega)
-];
-
+// 🌐 1. FULLY OPEN CORS FOR DEPLOYMENT (No more Vercel/CORS blocks)
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: '*', 
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json()); // Body parser to read incoming JSON data
 
-// Socket.io Setup with Deployment CORS
+// 🔌 2. Socket.io Setup with Open CORS
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
+    origin: '*',
+    methods: ["GET", "POST", "PUT", "DELETE"]
   }
 });
 
 // Database Connection
 connectDB();
 
-// Socket.io Logic
+// Live Socket.io Connections Management
 export const userSocketMap = new Map();
+
 io.on('connection', (socket) => {
+  console.log(`🔌 New client connected: ${socket.id}`);
+
   socket.on('join_user', (userId) => {
     userSocketMap.set(userId, socket.id);
+    console.log(`👤 User ${userId} linked to socket ${socket.id}`);
   });
 
   socket.on('disconnect', () => {
     for (let [userId, socketId] of userSocketMap.entries()) {
       if (socketId === socket.id) {
         userSocketMap.delete(userId);
+        console.log(`🚫 User ${userId} disconnected`);
         break;
       }
     }
   });
 });
 
+// Real-Time Notification Trigger Function
 export const sendRealTimeNotification = (receiverId, data) => {
   const socketId = userSocketMap.get(receiverId);
   if (socketId) {
@@ -70,18 +64,18 @@ export const sendRealTimeNotification = (receiverId, data) => {
   }
 };
 
-// Routes Middlewares
+// 🎯 3. Routes Middlewares (Prefix with /api)
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Root Check for Server Health
+// Server Root Route (Health Check)
 app.get('/', (req, res) => {
   res.send('Social Media Backend API is running successfully...');
 });
 
-// 🔌 Dynamic Port Configuration (CRITICAL FOR DEPLOYMENT)
+// Dynamic Port for Deployment (Render defaults to process.env.PORT)
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server is blasting on port ${PORT}`);
+  console.log(`🚀 Server is blasting on port ${PORT}`);
 });
